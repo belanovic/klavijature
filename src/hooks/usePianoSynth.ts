@@ -5,10 +5,14 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import * as Tone from 'tone';
 
 const PIANO_SAMPLES = {
-    'C3': 'C3.mp3', 'Fs3': 'Fs3.mp3',
-    'C4': 'C4.mp3', 'Fs4': 'Fs4.mp3',
-    'C5': 'C5.mp3', 'Fs5': 'Fs5.mp3',
-    'C6': 'C6.mp3'
+    'C3': 'C3.mp3', 'F#3': 'Fs3.mp3',
+    'C4': 'C4.mp3', 'F#4': 'Fs4.mp3',
+    'C5': 'C5.mp3', 'F#5': 'Fs5.mp3',
+    'C6': 'C6.mp3',
+    // Octave 7
+    'C7': 'C7.mp3', 'F#6': 'Fs6.mp3',
+    // Octave 8 (Partial) - C8 is often the highest note on a full piano
+    'C8': 'C8.mp3', 'F#7': 'Fs7.mp3'
 };
 const PIANO_BASE_URL = "https://tonejs.github.io/audio/salamander/";
 
@@ -83,3 +87,4 @@ const usePianoSynth = () => {
 };
 
 export default usePianoSynth;
+
