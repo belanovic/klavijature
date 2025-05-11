@@ -1,7 +1,16 @@
 
+"use client"; // Required for useState and useEffect
+
+import { useState, useEffect } from 'react';
 import VirtualPiano from '@/components/piano/VirtualPiano';
 
 export default function HomePage() {
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCurrentYear(new Date().getFullYear());
+  }, []);
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-4 bg-background text-foreground selection:bg-primary/20 selection:text-primary">
       <div className="container mx-auto flex flex-col items-center justify-center flex-grow">
@@ -23,14 +32,19 @@ export default function HomePage() {
             <h2 className="font-semibold text-foreground mb-2">How to Play:</h2>
             <p>Click/tap on keys or use your computer keyboard.</p>
             <p className="mt-1">
-              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">A S D F G H J K L ;</span> for white keys.
+              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">A S D F G H J K L ;</span> for white keys (C3-E4).
             </p>
             <p className="mt-1">
-              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">W E T Y U O P</span> for black keys.
+              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">W E T Y U O P</span> for black keys (C#3-D#4).
             </p>
+            <p className="mt-1">Higher octaves are playable by mouse/touch.</p>
           </div>
           <p>Built with Next.js, Tailwind CSS, and Tone.js.</p>
-          <p>&copy; {new Date().getFullYear()} Virtual Virtuoso. All sounds reserved to their creators.</p>
+          {currentYear !== null ? (
+            <p>&copy; {currentYear} Virtual Virtuoso. All sounds reserved to their creators.</p>
+          ) : (
+            <p>&copy; Virtual Virtuoso. All sounds reserved to their creators.</p>
+          )}
         </footer>
       </div>
     </main>

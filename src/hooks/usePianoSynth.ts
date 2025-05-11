@@ -1,78 +1,85 @@
 
 "use client";
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import * as Tone from 'tone';
 
+const PIANO_SAMPLES = {
+    'C3': 'C3.mp3', 'Fs3': 'Fs3.mp3',
+    'C4': 'C4.mp3', 'Fs4': 'Fs4.mp3',
+    'C5': 'C5.mp3', 'Fs5': 'Fs5.mp3',
+    'C6': 'C6.mp3'
+};
+const PIANO_BASE_URL = "https://tonejs.github.io/audio/salamander/";
+
 const usePianoSynth = () => {
-  const synthRef = useRef<Tone.PolySynth | null>(null);
-  const isToneStartedRef = useRef<boolean>(false);
+  const samplerRef = useRef<Tone.Sampler | null>(null);
+  const reverbRef = useRef<Tone.Reverb | null>(null);
+  
+  const [toneStarted, setToneStarted] = useState(false);
+  const [samplesLoaded, setSamplesLoaded] = useState(false);
 
   useEffect(() => {
-    // Initialize PolySynth with a configuration aiming for a piano-like sound.
-    // For truly "realistic" sounds, Tone.Sampler with high-quality piano samples is preferred,
-    // but PolySynth is used here to keep the app size small and avoid managing audio assets.
-    synthRef.current = new Tone.PolySynth(Tone.Synth, {
-      oscillator: {
-        // fmtriangle can offer a bit more complexity than a simple sine/triangle.
-        // Experimentation with 'fat' types or slightly detuned oscillators could also be considered.
-        type: 'fmtriangle', 
-        harmonicity: 1.2, // Adds some metallic quality, can be adjusted
-        modulationType: "sine",
-      },
-      envelope: {
-        attack: 0.01,    // Fast attack for percussive feel
-        decay: 0.4,      // Moderate decay
-        sustain: 0.1,    // Low sustain, typical for piano
-        release: 1.2,    // Relatively long release for resonance
-      },
-      volume: -10 // Adjust volume to prevent clipping and balance with other sounds if any
-    }).toDestination();
-
-    // Add a simple reverb for a bit more space
-    const reverb = new Tone.Reverb({
+    const newReverb = new Tone.Reverb({
       decay: 1.5,
       wet: 0.3
     }).toDestination();
-    synthRef.current.connect(reverb);
+    reverbRef.current = newReverb;
 
+    const newSampler = new Tone.Sampler({
+      urls: PIANO_SAMPLES,
+      baseUrl: PIANO_BASE_URL,
+      release: 1, // Piano-like release
+      onload: () => {
+        setSamplesLoaded(true);
+        console.log('Piano samples loaded.');
+      }
+    });
+    
+    newSampler.connect(newReverb);
+    samplerRef.current = newSampler;
 
     return () => {
-      synthRef.current?.dispose();
-      reverb.dispose();
+      samplerRef.current?.dispose();
+      reverbRef.current?.dispose();
     };
   }, []);
 
-  const ensureAudioContextStarted = useCallback(async () => {
-    if (!isToneStartedRef.current && Tone.context.state !== 'running') {
+  const initPiano = useCallback(async () => {
+    if (Tone.context.state !== 'running') {
       try {
         await Tone.start();
-        isToneStartedRef.current = true;
         console.log('AudioContext started successfully.');
       } catch (error) {
         console.error("Error starting AudioContext:", error);
-        // Potentially show a message to the user here
+        throw error; // Re-throw to be caught by caller
       }
     }
+    setToneStarted(true);
   }, []);
 
   const playNote = useCallback((note: string) => {
-    // Ensure audio context is running, then play
-    ensureAudioContextStarted().then(() => {
-       if (synthRef.current) {
-        // Play with a velocity for slight dynamics. Could be randomized or based on key press strength if available.
-        synthRef.current.triggerAttack(note, Tone.now(), 0.8);
-      }
-    });
-  }, [ensureAudioContextStarted]);
+    if (toneStarted && samplesLoaded && samplerRef.current) {
+      samplerRef.current.triggerAttack(note, Tone.now());
+    } else {
+      // console.warn("Piano not ready or note play attempted too early.");
+    }
+  }, [toneStarted, samplesLoaded]);
 
   const stopNote = useCallback((note: string) => {
-    if (synthRef.current) {
-      synthRef.current.triggerRelease(note, Tone.now() + 0.05); // Slight delay to avoid abrupt cutoff
+    if (toneStarted && samplesLoaded && samplerRef.current) {
+      // Add a slight delay to the release for a more natural sound
+      samplerRef.current.triggerRelease(note, Tone.now() + 0.05);
     }
-  }, []);
+  }, [toneStarted, samplesLoaded]);
 
-  return { playNote, stopNote, ensureAudioContextStarted };
+  return { 
+    playNote, 
+    stopNote, 
+    initPiano,
+    isLoading: toneStarted && !samplesLoaded, // True after initPiano called, until samples are loaded
+    isReady: toneStarted && samplesLoaded    // True when all set and ready to play
+  };
 };
 
 export default usePianoSynth;
