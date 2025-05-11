@@ -25,7 +25,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning> {/* Added suppressHydrationWarning for potential date/time mismatches if any client-only date logic was used */}
+    // Added suppressHydrationWarning for potential date/time mismatches if any client-only date logic was used
+    <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}
         <Toaster />
