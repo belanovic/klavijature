@@ -1,33 +1,41 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import * as Tone from 'tone';
 import { pianoNotesConfig, whiteKeysConfig, blackKeysConfig } from '@/config/pianoNotes';
+import { princeIgorMelodySnippet, type MelodyNote } from '@/config/melodies';
 import PianoKey from './PianoKey';
 import usePianoSynth from '@/hooks/usePianoSynth';
 import { Button } from '@/components/ui/button';
-import { Volume2, VolumeX, Disc3 } from 'lucide-react'; // Added Disc3 for loading
-import { Progress } from '@/components/ui/progress'; // For loading indicator
+import { Volume2, VolumeX, Disc3, PlayCircle, StopCircle, Music2 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { useToast } from "@/hooks/use-toast";
+
 
 const VirtualPiano: React.FC = () => {
   const [activeNotes, setActiveNotes] = useState<Set<string>>(new Set());
   const { playNote, stopNote, initPiano, isLoading, isReady } = usePianoSynth();
   const [isMuted, setIsMuted] = useState(false);
-  const [isActivatingAudio, setIsActivatingAudio] = useState(false); // For "Start Piano" button's own loading state
+  const [isActivatingAudio, setIsActivatingAudio] = useState(false);
+  const [isPlayingMelody, setIsPlayingMelody] = useState(false);
   
   const pianoContainerRef = useRef<HTMLDivElement>(null);
+  const melodyPartRef = useRef<Tone.Part<MelodyNote> | null>(null);
+  const cleanupTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
 
   const WHITE_KEY_WIDTH_PERCENT = 100 / whiteKeysConfig.length;
   const BLACK_KEY_HEIGHT_PERCENT = 60; 
   const BLACK_KEY_WIDTH_PERCENT = WHITE_KEY_WIDTH_PERCENT * 0.6;
 
   const handleInteractionStart = useCallback((note: string) => {
-    if (isMuted || !isReady) return;
+    if (isMuted || !isReady || isPlayingMelody) return;
     setActiveNotes(prev => new Set(prev).add(note));
     playNote(note);
-  }, [playNote, isMuted, isReady]);
+  }, [playNote, isMuted, isReady, isPlayingMelody]);
 
   const handleInteractionEnd = useCallback((note: string) => {
+    // Allow manual release even if melody is playing, but it won't stop melody's note
     if (isMuted || !isReady) return; 
     setActiveNotes(prev => {
       const newSet = new Set(prev);
@@ -46,7 +54,7 @@ const VirtualPiano: React.FC = () => {
     });
 
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (!isReady || event.repeat) return;
+      if (!isReady || event.repeat || isPlayingMelody) return;
       const note = keyMap[event.key.toLowerCase()];
       if (note && !activeNotes.has(note)) {
         handleInteractionStart(note);
@@ -54,7 +62,7 @@ const VirtualPiano: React.FC = () => {
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
-      if (!isReady) return;
+      if (!isReady || isPlayingMelody) return; // Also prevent key up if melody is playing to avoid conflict
       const note = keyMap[event.key.toLowerCase()];
       if (note && activeNotes.has(note)) {
         handleInteractionEnd(note);
@@ -67,25 +75,147 @@ const VirtualPiano: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
+      // Cleanup Tone.js Transport and Part on component unmount
+      if (melodyPartRef.current) {
+        melodyPartRef.current.stop(0);
+        melodyPartRef.current.dispose();
+      }
+      Tone.Transport.stop();
+      Tone.Transport.cancel(0);
+      if (cleanupTimeoutRef.current) {
+        clearTimeout(cleanupTimeoutRef.current);
+      }
     };
-  }, [activeNotes, handleInteractionStart, handleInteractionEnd, isReady]);
+  }, [activeNotes, handleInteractionStart, handleInteractionEnd, isReady, isPlayingMelody]);
 
   const handleInitPiano = async () => {
     setIsActivatingAudio(true);
     try {
       await initPiano();
+      toast({ title: "Piano Ready", description: "Audio initialized and samples loaded." });
     } catch (error) {
       console.error("Error initializing piano:", error);
-      // Optionally, display a toast message to the user
+      toast({ variant: "destructive", title: "Audio Error", description: "Could not initialize audio." });
     }
     setIsActivatingAudio(false); 
   };
 
   const toggleMute = () => {
     setIsMuted(prev => !prev);
+    toast({ title: isMuted ? "Sound On" : "Sound Muted" });
   };
 
-  if (!isReady && !isLoading) {
+  const calculateMelodyDuration = (melody: MelodyNote[]): number => {
+    if (!melody.length) return 0;
+    let maxEndTime = 0;
+    melody.forEach(event => {
+        const startTimeSeconds = Tone.Time(event.time).toSeconds();
+        const durationSeconds = Tone.Time(event.duration).toSeconds();
+        const endTimeSeconds = startTimeSeconds + durationSeconds;
+        if (endTimeSeconds > maxEndTime) {
+            maxEndTime = endTimeSeconds;
+        }
+    });
+    return maxEndTime;
+  };
+
+  const playMelody = useCallback(async () => {
+    if (isPlayingMelody || !isReady || isLoading) return;
+  
+    setIsPlayingMelody(true);
+    toast({ title: "Playing Melody", description: "Prince Igor snippet started." });
+  
+    if (Tone.Transport.state !== "started") {
+      try {
+        await Tone.Transport.start();
+      } catch (e) {
+        console.error("Failed to start Tone.Transport", e);
+        setIsPlayingMelody(false);
+        toast({ variant: "destructive", title: "Playback Error", description: "Could not start audio transport." });
+        return;
+      }
+    }
+  
+    if (melodyPartRef.current) {
+      melodyPartRef.current.stop(0);
+      melodyPartRef.current.dispose();
+    }
+    Tone.Transport.cancel(0);
+    if (cleanupTimeoutRef.current) clearTimeout(cleanupTimeoutRef.current);
+    setActiveNotes(new Set());
+  
+    const partEvents = princeIgorMelodySnippet.map(event => ({
+      time: event.time,
+      note: event.note,
+      duration: event.duration,
+      value: event 
+    }));
+  
+    melodyPartRef.current = new Tone.Part<MelodyNote>((time, value) => {
+      const noteToPlay = value.note;
+      
+      Tone.Draw.schedule(() => {
+        setActiveNotes(prev => new Set(prev).add(noteToPlay));
+      }, time);
+  
+      playNote(noteToPlay);
+  
+      Tone.Transport.scheduleOnce(() => {
+        stopNote(noteToPlay);
+        Tone.Draw.schedule(() => {
+          setActiveNotes(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(noteToPlay);
+            return newSet;
+          });
+        }, Tone.now());
+      }, time + Tone.Time(value.duration).toSeconds());
+    
+    }, partEvents);
+    
+    melodyPartRef.current.loop = false;
+    melodyPartRef.current.start(0);
+  
+    const totalDurationSeconds = calculateMelodyDuration(princeIgorMelodySnippet);
+  
+    cleanupTimeoutRef.current = setTimeout(() => {
+      setIsPlayingMelody(false);
+      setActiveNotes(new Set());
+      toast({ title: "Melody Finished" });
+      // Tone.Transport.stop(); // Optionally stop transport
+      // Tone.Transport.position = 0;
+    }, (totalDurationSeconds + 0.5) * 1000);
+  
+    Tone.Transport.position = 0;
+    if (Tone.Transport.state !== "started") Tone.Transport.start();
+
+  }, [isPlayingMelody, isReady, isLoading, playNote, stopNote, toast]);
+
+  const stopMelody = useCallback(() => {
+    if (!isPlayingMelody) return;
+
+    if (melodyPartRef.current) {
+        melodyPartRef.current.stop(0);
+        melodyPartRef.current.dispose();
+        melodyPartRef.current = null;
+    }
+    Tone.Transport.stop();
+    Tone.Transport.cancel(0);
+    Tone.Transport.position = 0;
+
+    if (cleanupTimeoutRef.current) clearTimeout(cleanupTimeoutRef.current);
+    
+    // Explicitly stop any lingering notes and clear visual state
+    activeNotes.forEach(note => {
+      if (samplerRef.current) stopNote(note); // Assuming samplerRef is accessible or stopNote handles it
+    });
+    setActiveNotes(new Set());
+    setIsPlayingMelody(false);
+    toast({ title: "Melody Stopped" });
+  }, [isPlayingMelody, activeNotes, stopNote, toast]);
+
+
+  if (!isReady && !isLoading && !isActivatingAudio) { // Added !isActivatingAudio here
     return (
       <div className="flex flex-col items-center justify-center p-8 bg-card rounded-lg shadow-xl border border-border">
         <h2 className="text-2xl font-semibold mb-4 text-primary">Welcome to Virtual Virtuoso!</h2>
@@ -93,7 +223,7 @@ const VirtualPiano: React.FC = () => {
           Click the button below to enable audio and load piano samples.
         </p>
         <Button onClick={handleInitPiano} size="lg" disabled={isActivatingAudio}>
-          {isActivatingAudio ? (
+          {isActivatingAudio ? ( // This state is now local to this button's action
             <>
               <Disc3 className="mr-2 h-5 w-5 animate-spin" />
               Starting Audio...
@@ -106,23 +236,30 @@ const VirtualPiano: React.FC = () => {
     );
   }
   
-  if (isLoading) {
+  if (isLoading) { // This is for sample loading after Tone.start()
      return (
       <div className="flex flex-col items-center justify-center p-8 bg-card rounded-lg shadow-xl border border-border">
         <Disc3 className="h-12 w-12 text-primary animate-spin mb-4" />
         <h2 className="text-2xl font-semibold mb-2 text-primary">Loading Piano Samples</h2>
         <p className="text-muted-foreground mb-4">This may take a few moments...</p>
-        {/* You could add a progress bar here if Tone.js provided progress events for sampler loading */}
-        {/* For now, a spinner is sufficient as we don't have fine-grained progress */}
-         <Progress value={33} className="w-3/4" /> {/* Indeterminate or estimated progress */}
+        <Progress value={50} className="w-3/4" /> {/* Placeholder progress */}
       </div>
     );
   }
   
   return (
     <div className="w-full max-w-7xl mx-auto p-2 sm:p-4 bg-neutral-200 dark:bg-neutral-900 rounded-lg shadow-2xl">
-      <div className="flex justify-end mb-2">
-        <Button onClick={toggleMute} variant="ghost" size="icon" aria-label={isMuted ? "Unmute" : "Mute"}>
+      <div className="flex justify-end items-center mb-2 space-x-2">
+        <Button 
+          onClick={isPlayingMelody ? stopMelody : playMelody} 
+          variant="outline" 
+          size="icon" 
+          aria-label={isPlayingMelody ? "Stop Melody" : "Play Prince Igor Snippet"}
+          disabled={!isReady || isLoading}
+        >
+          {isPlayingMelody ? <StopCircle className="h-5 w-5" /> : <Music2 className="h-5 w-5" />}
+        </Button>
+        <Button onClick={toggleMute} variant="ghost" size="icon" aria-label={isMuted ? "Unmute" : "Mute"} disabled={!isReady || isLoading}>
           {isMuted ? <VolumeX className="h-5 w-5" /> : <Volume2 className="h-5 w-5" />}
         </Button>
       </div>
