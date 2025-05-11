@@ -3,8 +3,6 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as Tone from 'tone';
 
-// Using F# (Fs) for consistency with Tone.js documentation examples, though it handles both.
-// Updated sample map for clarity and to ensure correct note mapping.
 const PIANO_SAMPLES = {
     'A0': 'A0.mp3', 'C1': 'C1.mp3', 'D#1': 'Ds1.mp3', 'F#1': 'Fs1.mp3', 'A1': 'A1.mp3', 
     'C2': 'C2.mp3', 'D#2': 'Ds2.mp3', 'F#2': 'Fs2.mp3', 'A2': 'A2.mp3',
@@ -21,9 +19,9 @@ const usePianoSynth = () => {
   const samplerRef = useRef<Tone.Sampler | null>(null);
   const reverbRef = useRef<Tone.Reverb | null>(null);
   
-  const [toneStarted, setToneStarted] = useState(false); // Tracks if Tone.start() has been successfully called
-  const [samplesLoading, setSamplesLoading] = useState(false); // Tracks if samples have begun loading
-  const [samplesLoaded, setSamplesLoaded] = useState(false); // Tracks if samples have finished loading
+  const [toneStarted, setToneStarted] = useState(false);
+  const [samplesLoading, setSamplesLoading] = useState(false);
+  const [samplesLoaded, setSamplesLoaded] = useState(false);
 
   useEffect(() => {
     const newReverb = new Tone.Reverb({
@@ -38,65 +36,57 @@ const usePianoSynth = () => {
       release: 1,
       onload: () => {
         setSamplesLoaded(true);
-        setSamplesLoading(false); // Finished loading
+        setSamplesLoading(false);
         console.log('Piano samples loaded.');
       },
       onerror: (error) => {
         console.error("Error loading piano samples:", error);
-        setSamplesLoading(false); // Finished loading (with error)
+        setSamplesLoading(false);
       }
-    });
+    }).connect(newReverb);
     
-    newSampler.connect(newReverb);
     samplerRef.current = newSampler;
 
     return () => {
       samplerRef.current?.dispose();
       reverbRef.current?.dispose();
-      // If transport was used by this hook's user, it should be managed by them.
-      // For safety, we can stop it if it was started implicitly by parts.
-      if (Tone.Transport.state === "started") {
-        // Tone.Transport.stop(); // Be cautious if other components use Transport
-        // Tone.Transport.cancel(0);
-      }
+      // Transport is managed by VirtualPiano component if used for melodies
     };
   }, []);
 
   const initPiano = useCallback(async () => {
     if (Tone.context.state !== 'running') {
       try {
-        await Tone.start(); // This initializes the AudioContext
+        await Tone.start();
         console.log('AudioContext started successfully.');
         setToneStarted(true);
       } catch (error) {
         console.error("Error starting AudioContext:", error);
-        setToneStarted(false); // Ensure state reflects failure
+        setToneStarted(false);
         throw error; 
       }
     } else {
-      setToneStarted(true); // Already running
+      setToneStarted(true);
     }
 
-    // Trigger sample loading if not already started
     if (samplerRef.current && !samplesLoading && !samplesLoaded) {
         setSamplesLoading(true);
-        // Tone.Sampler typically starts loading on instantiation if urls are provided.
-        // If it has an explicit load method and hasn't loaded, call it here.
-        // For Tone.js Sampler, onload is the primary mechanism.
-        // If samplerRef.current.loaded is false, and no explicit load method,
-        // it implies loading might be deferred or failed.
-        // The `onload` callback in the Sampler constructor handles `setSamplesLoaded`.
+        // Sampler loads on instantiation, onload callback handles state updates.
     }
   }, [samplesLoading, samplesLoaded]);
 
   const playNote = useCallback((note: string, time?: Tone.Unit.Time, velocity?: Tone.Unit.NormalRange) => {
     if (toneStarted && samplesLoaded && samplerRef.current) {
-      samplerRef.current.triggerAttack(note, time ?? Tone.now(), velocity);
+      // If 'time' is provided (e.g., from Tone.Part), use it for precise scheduling.
+      // Otherwise (manual play), play immediately.
+      samplerRef.current.triggerAttack(note, time, velocity);
     }
   }, [toneStarted, samplesLoaded]);
 
   const stopNote = useCallback((note: string, time?: Tone.Unit.Time) => {
     if (toneStarted && samplesLoaded && samplerRef.current) {
+      // If 'time' is provided, schedule release at that specific transport time.
+      // Otherwise (manual key release or scheduled stop without specific time), release now-ish.
       samplerRef.current.triggerRelease(note, time ?? (Tone.now() + 0.05));
     }
   }, [toneStarted, samplesLoaded]);
@@ -105,11 +95,9 @@ const usePianoSynth = () => {
     playNote, 
     stopNote, 
     initPiano,
-    // isLoading reflects the sample loading phase AFTER Tone.start() succeeded
     isLoading: toneStarted && (samplesLoading || !samplesLoaded), 
-    // isReady means Tone.start() succeeded AND samples are loaded
     isReady: toneStarted && samplesLoaded,
-    sampler: samplerRef.current // Expose sampler for more advanced control if needed
+    sampler: samplerRef.current 
   };
 };
 
