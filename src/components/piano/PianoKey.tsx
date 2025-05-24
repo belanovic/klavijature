@@ -9,6 +9,7 @@ interface PianoKeyProps {
   isPressed: boolean;
   onInteractionStart: (note: string) => void;
   onInteractionEnd: (note: string) => void;
+  isGlobalMouseDown: boolean; // New prop
   className?: string;
   style?: React.CSSProperties;
 }
@@ -18,20 +19,48 @@ const PianoKey: React.FC<PianoKeyProps> = ({
   isPressed,
   onInteractionStart,
   onInteractionEnd,
+  isGlobalMouseDown,
   className,
   style,
 }) => {
   const { note, type, label, ariaLabel } = config;
 
-  const handleMouseDown = () => onInteractionStart(note);
-  const handleMouseUp = () => onInteractionEnd(note);
+  const handleMouseDownLocal = () => {
+    onInteractionStart(note);
+  };
+
+  const handleMouseUpLocal = () => {
+    // Only stop if this key is actually pressed.
+    // This prevents issues if mouseup happens over a key that wasn't the source of the mousedown,
+    // or if interaction ended due to mouse leave during drag.
+    if (isPressed) {
+        onInteractionEnd(note);
+    }
+  };
+
+  const handleMouseEnterLocal = () => {
+    if (isGlobalMouseDown && !isPressed) {
+      onInteractionStart(note);
+    }
+  };
+
+  const handleMouseLeaveLocal = () => {
+    // If dragging (global mouse down) and this key is pressed, stop it.
+    if (isGlobalMouseDown && isPressed) {
+      onInteractionEnd(note);
+    }
+  };
+  
   const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault(); // Prevents mouse events from firing on touch devices
+    e.preventDefault(); 
     onInteractionStart(note);
   };
   const handleTouchEnd = (e: React.TouchEvent) => {
     e.preventDefault();
-    onInteractionEnd(note);
+    // Ensure it was pressed before trying to stop, for robustness
+    if (isPressed) {
+        onInteractionEnd(note);
+    }
   };
 
   const keyBaseClasses = "relative flex items-end justify-center p-2 border cursor-pointer select-none transition-all duration-50 ease-out shadow-md active:shadow-inner";
@@ -55,17 +84,17 @@ const PianoKey: React.FC<PianoKeyProps> = ({
   return (
     <div
       role="button"
-      tabIndex={0} // Make it focusable, though keyboard interaction is global
+      tabIndex={0} 
       aria-pressed={isPressed}
       aria-label={ariaLabel}
       className={type === 'white' ? whiteKeyClasses : blackKeyClasses}
       style={style}
-      onMouseDown={handleMouseDown}
-      onMouseUp={handleMouseUp}
-      onMouseLeave={handleMouseUp} // Stop note if mouse leaves while pressed
+      onMouseDown={handleMouseDownLocal}
+      onMouseUp={handleMouseUpLocal}
+      onMouseEnter={handleMouseEnterLocal}
+      onMouseLeave={handleMouseLeaveLocal} 
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
-      // onKeyDown and onKeyUp are handled globally by VirtualPiano for keyboard input
     >
       <span className="text-xs font-medium pointer-events-none">{label}</span>
     </div>
