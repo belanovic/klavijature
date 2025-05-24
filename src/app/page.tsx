@@ -31,11 +31,12 @@ export default function HomePage() {
           <div className="mb-4 p-4 border border-dashed border-border rounded-lg max-w-md mx-auto bg-card">
             <h2 className="font-semibold text-foreground mb-2">How to Play:</h2>
             <p>Click/tap on keys or use your computer keyboard.</p>
+            <p className="mt-1">The keys are not labeled, but the standard keyboard mapping is:</p>
             <p className="mt-1">
-              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">A S D F G H J K L ;</span> for white keys (C3-E4).
+              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">A S D F G H J K L ;</span> for white keys (starting from C3).
             </p>
             <p className="mt-1">
-              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">W E T Y U O P</span> for black keys (C#3-D#4).
+              <span className="font-mono bg-muted px-1.5 py-0.5 rounded">W E T Y U O P</span> for black keys (starting from C#3).
             </p>
             <p className="mt-1">Higher octaves are playable by mouse/touch.</p>
           </div>
