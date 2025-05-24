@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -25,15 +26,15 @@ const usePianoSynth = () => {
 
   useEffect(() => {
     const newReverb = new Tone.Reverb({
-      decay: 1.5,
-      wet: 0.3
+      decay: 2.2, // Povećan decay za duži odjek
+      wet: 0.35   // Malo povećan wet za izraženiji reverb
     }).toDestination();
     reverbRef.current = newReverb;
 
     const newSampler = new Tone.Sampler({
       urls: PIANO_SAMPLES,
       baseUrl: PIANO_BASE_URL,
-      release: 1,
+      release: 1.8, // Povećan release za duže trajanje note nakon otpuštanja dirke
       onload: () => {
         setSamplesLoaded(true);
         setSamplesLoading(false);
