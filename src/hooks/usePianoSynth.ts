@@ -26,15 +26,15 @@ const usePianoSynth = () => {
 
   useEffect(() => {
     const newReverb = new Tone.Reverb({
-      decay: 2.2, // Povećan decay za duži odjek
-      wet: 0.35   // Malo povećan wet za izraženiji reverb
+      decay: 2.5, // Malo duži decay za bogatiji odjek
+      wet: 0.38   // Blago povećan wet za izraženiji, ali ne preteran reverb
     }).toDestination();
     reverbRef.current = newReverb;
 
     const newSampler = new Tone.Sampler({
       urls: PIANO_SAMPLES,
       baseUrl: PIANO_BASE_URL,
-      release: 1.8, // Povećan release za duže trajanje note nakon otpuštanja dirke
+      release: 2.0, // Produžen release za prirodnije trajanje note
       onload: () => {
         setSamplesLoaded(true);
         setSamplesLoading(false);
@@ -51,7 +51,6 @@ const usePianoSynth = () => {
     return () => {
       samplerRef.current?.dispose();
       reverbRef.current?.dispose();
-      // Transport is managed by VirtualPiano component if used for melodies
     };
   }, []);
 
@@ -72,22 +71,17 @@ const usePianoSynth = () => {
 
     if (samplerRef.current && !samplesLoading && !samplesLoaded) {
         setSamplesLoading(true);
-        // Sampler loads on instantiation, onload callback handles state updates.
     }
   }, [samplesLoading, samplesLoaded]);
 
   const playNote = useCallback((note: string, time?: Tone.Unit.Time, velocity?: Tone.Unit.NormalRange) => {
     if (toneStarted && samplesLoaded && samplerRef.current) {
-      // If 'time' is provided (e.g., from Tone.Part), use it for precise scheduling.
-      // Otherwise (manual play), play immediately.
       samplerRef.current.triggerAttack(note, time, velocity);
     }
   }, [toneStarted, samplesLoaded]);
 
   const stopNote = useCallback((note: string, time?: Tone.Unit.Time) => {
     if (toneStarted && samplesLoaded && samplerRef.current) {
-      // If 'time' is provided, schedule release at that specific transport time.
-      // Otherwise (manual key release or scheduled stop without specific time), release now-ish.
       samplerRef.current.triggerRelease(note, time ?? (Tone.now() + 0.05));
     }
   }, [toneStarted, samplesLoaded]);
